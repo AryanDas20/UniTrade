@@ -10,7 +10,7 @@
     vault:'unitrade_vault', fireNotify:'unitrade_fire_notify', rentPlan:'unitrade_rent_plan', compare:'unitrade_compare',
     storageVersion:'unitrade_storage_version'
   });
-  const STORAGE_VERSION='commercial_v5_empty';
+  const STORAGE_VERSION='commercial_v6_stable';
   const ROUTES=new Set(['home','marketplace','requests','community','services','rent','barter','fair-price','lost-found','starter-kits','fire-sale','vacation-hold','vault','impact','safety','about','contributors','guide']);
   const SERVICE_ROUTES=new Set(['rent','barter','fair-price','lost-found','starter-kits','fire-sale','vacation-hold','vault']);
   const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(Number(n)||0);
@@ -59,12 +59,13 @@
     ['Fire Sale','Open semester clear-out','fire-sale'],['Vacation Hold','Plan storage','vacation-hold'],['Digital Vault','Open resources','vault'],['Impact','Open local impact','impact'],['Trust & Safety','Open safety center','safety'],['About','Read about UniTrade','about'],['Contributors','Meet the makers','contributors'],['Product Guide','Read and download the product guide','guide']
   ];
 
-  function saveData(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch(err){console.warn('localStorage write failed',err);toast('Local save unavailable','Your browser blocked local storage for this page.','error');return false}}
-  function loadData(key,fallback){try{const raw=localStorage.getItem(key);return raw===null?fallback:JSON.parse(raw)}catch(err){console.warn('localStorage read failed',err);return fallback}}
-  function removeData(key){try{localStorage.removeItem(key)}catch(err){console.warn('localStorage remove failed',err)}}
+  const memoryStore=new Map(); let storageWarningShown=false;
+  function saveData(key,value){try{localStorage.setItem(key,JSON.stringify(value));memoryStore.set(key,value);return true}catch(err){memoryStore.set(key,value);if(!storageWarningShown){storageWarningShown=true;console.warn('localStorage write failed; using in-memory fallback.',err);toast('Local storage is unavailable','UniTrade will keep your changes in this session. Enable site storage for persistence after closing the page.','info')}return false}}
+  function loadData(key,fallback){try{const raw=localStorage.getItem(key);if(raw===null)return memoryStore.has(key)?memoryStore.get(key):fallback;const value=JSON.parse(raw);memoryStore.set(key,value);return value}catch(err){return memoryStore.has(key)?memoryStore.get(key):fallback}}
+  function removeData(key){memoryStore.delete(key);try{localStorage.removeItem(key)}catch(err){console.warn('localStorage remove failed',err)}}
   function persist(){saveData(KEYS.user,state.user);saveData(KEYS.users,state.users);saveData(KEYS.listings,state.listings);saveData(KEYS.favorites,state.favorites);saveData(KEYS.requests,state.requests);saveData(KEYS.trades,state.trades);saveData(KEYS.notifications,state.notifications);saveData(KEYS.recentlyViewed,state.recentlyViewed);saveData(KEYS.theme,state.theme);saveData(KEYS.settings,state.settings);saveData(KEYS.karma,state.karma);saveData(KEYS.impact,state.impact);saveData(KEYS.searches,state.searches);saveData(KEYS.lostFound,state.lostFound);saveData(KEYS.vault,state.vault);saveData(KEYS.fireNotify,state.fireNotify);saveData(KEYS.rentPlan,state.rentPlan);saveData(KEYS.compare,state.compare);saveData(KEYS.storageVersion,STORAGE_VERSION);saveData(KEYS.lastSession,{at:new Date().toISOString(),route:currentRoute()})}
   function clearLocalData(){Object.values(KEYS).forEach(removeData);location.hash='#home';location.reload()}
-  function resetOnVersion(){if(loadData(KEYS.storageVersion,null)!==STORAGE_VERSION){Object.values(KEYS).forEach(removeData);saveData(KEYS.storageVersion,STORAGE_VERSION)}}
+  function resetOnVersion(){const current=loadData(KEYS.storageVersion,null);if(current===STORAGE_VERSION)return;const legacySeeded=['commercial_v1','commercial_v2','commercial_v3_demo','commercial_v4_demo','commercial_v5_empty'];if(legacySeeded.includes(current)){Object.values(KEYS).forEach(removeData);}saveData(KEYS.storageVersion,STORAGE_VERSION)}
   function hydrate(){resetOnVersion();state.user=loadData(KEYS.user,null);state.users=loadData(KEYS.users,[]);state.listings=loadData(KEYS.listings,[]);state.favorites=loadData(KEYS.favorites,[]);state.requests=loadData(KEYS.requests,[]);state.trades=loadData(KEYS.trades,[]);state.notifications=loadData(KEYS.notifications,[]);state.recentlyViewed=loadData(KEYS.recentlyViewed,[]);state.theme=loadData(KEYS.theme,'dark');state.settings={...state.settings,...loadData(KEYS.settings,{})};state.karma=loadData(KEYS.karma,0);state.impact=loadData(KEYS.impact,{});state.searches=loadData(KEYS.searches,[]);state.lostFound=loadData(KEYS.lostFound,[]);state.vault=loadData(KEYS.vault,[]);state.fireNotify=loadData(KEYS.fireNotify,false);state.rentPlan=loadData(KEYS.rentPlan,null);state.compare=loadData(KEYS.compare,[]);applyTheme();applySettings()}
 
   function toast(title,message='',type='info'){const wrap=document.createElement('div');wrap.className=`toast toast-${type}`;wrap.innerHTML=`<span class="toast-icon">${type==='error'?'!':type==='success'?'✓':'i'}</span><div><strong>${escapeHTML(title)}</strong><small>${escapeHTML(message)}</small></div><button aria-label="Dismiss">×</button>`;$('#toastRegion')?.appendChild(wrap);wrap.querySelector('button')?.addEventListener('click',()=>wrap.remove());setTimeout(()=>wrap.remove(),4200)}
@@ -162,7 +163,7 @@
     $('#clearSearch').addEventListener('click',()=>{state.search='';$('#globalSearch').value='';$('#heroSearch').value='';renderListings();$('#globalSearch').focus()});
     $$('.filter-select[data-filter-mode]').forEach(b=>b.addEventListener('click',()=>{$$('.filter-select[data-filter-mode]').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.filterMode=b.dataset.filterMode;renderListings()}));
     $('#categoryFilter').addEventListener('change',e=>{state.filterCategory=e.target.value;renderListings()});$('#conditionFilter').addEventListener('change',e=>{state.filterCondition=e.target.value;renderListings()});$('#sortFilter').addEventListener('change',e=>{state.sort=e.target.value;renderListings()});
-    $('#filterFocusBtn').addEventListener('click',()=>$('#filterRow').scrollIntoView({behavior:state.settings.reducedMotion?'auto':'smooth',block:'center'}));$('#resetFiltersBtn').addEventListener('click',resetFilters);$('#resetFiltersEmpty')?.addEventListener('click',resetFilters);$('#compareBtn').addEventListener('click',openCompare);$('#newListingBtn').addEventListener('click',()=>state.user?openModal('listingModal'):showLogin());
+    $('#filterFocusBtn').addEventListener('click',()=>$('#filterRow').scrollIntoView({behavior:state.settings.reducedMotion?'auto':'smooth',block:'center'}));$('#resetFiltersBtn').addEventListener('click',resetFilters);$('#resetFiltersEmpty').addEventListener('click',resetFilters);$('#compareBtn').addEventListener('click',openCompare);$('#newListingBtn').addEventListener('click',()=>state.user?openModal('listingModal'):showLogin());
     $('#requestPageBtn').addEventListener('click',()=>state.user?openModal('requestModal'):showLogin());$('#freebieBtn').addEventListener('click',()=>{if(!state.user)return showLogin();state.filterMode='free';navigate('marketplace')});
   }
 
@@ -185,7 +186,7 @@
     $('#themeBtn').addEventListener('click',toggleTheme);$('#notificationsBtn').addEventListener('click',()=>{state.notifications=state.notifications.map(n=>({...n,unread:false}));persist();renderNotifications();renderNotificationCount();openModal('notificationModal')});$('#profileBtn').addEventListener('click',()=>{if(state.user)openModal('profileModal');else showLogin()});$('#mobileMenuBtn').addEventListener('click',()=>{$('#mobileNav').hidden=!$('#mobileNav').hidden;$('#mobileMenuBtn').setAttribute('aria-expanded',String(!$('#mobileNav').hidden))});$('#mobileNavClose').addEventListener('click',closeMobileNav);
     $('#navSignInBtn').addEventListener('click',showLogin);$('#navSignUpBtn').addEventListener('click',showSignup);$('#heroSignInBtn').addEventListener('click',showLogin);$('#heroSignUpBtn').addEventListener('click',showSignup);
     $('#settingsBtn').addEventListener('click',()=>{closeModal();openModal('settingsModal')});$('#settingsFooter').addEventListener('click',()=>openModal('settingsModal'));$('#shortcutsBtn').addEventListener('click',openShortcuts);$('#startTourFooter').addEventListener('click',()=>startTour(0));$('#settingsClearBtn').addEventListener('click',()=>{if(confirm('Clear all UniTrade data stored in this browser? Unrelated browser storage will remain untouched.'))clearLocalData()});$('#logoutBtn').addEventListener('click',()=>{state.user=null;persist();closeModal();renderProfile();renderListings();renderRequests();renderCommunity();renderImpact();renderVault();renderTradeOptions();renderTradeHistory();renderBundleCards();renderFireSale();toast('Signed out','Your marketplace data remains saved on this device.','success')});
-    $('#editProfileBtn')?.addEventListener('click',()=>toast('Profile editing','Your current profile fields are stored locally. A richer profile editor can be connected without changing the product navigation.','info'));
+    $('#editProfileBtn').addEventListener('click',()=>toast('Profile editing','Your current profile fields are stored locally. A richer profile editor can be connected without changing the product navigation.','info'));
     $('#paletteInput').addEventListener('input',e=>renderCommands(e.target.value));$('[data-close-palette]').addEventListener('click',closeCommandPalette);document.addEventListener('click',e=>{if(e.target.matches('[data-close-modal]'))closeModal();if(e.target.closest('[data-route]')?.dataset.route==='guide'&&e.target.closest('button'))navigate('guide')});document.addEventListener('keydown',handleKeyboard);
     $('#compactCards').addEventListener('change',e=>{state.settings.compact=e.target.checked;persist();applySettings()});$('#savedAlerts').addEventListener('change',e=>{state.settings.savedAlerts=e.target.checked;persist();applySettings()});$('#reducedMotion').addEventListener('change',e=>{state.settings.reducedMotion=e.target.checked;persist();applySettings();initCanvas(true)});
   }
@@ -200,13 +201,70 @@
 
   function handleKeyboard(e){const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;if(e.key==='Escape'){if(!$('#commandPalette').hidden){closeCommandPalette();return}if(!$('#modalRoot').hidden){closeModal();return}}if(typing)return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette();return}if(e.key==='/'){e.preventDefault();navigate('marketplace');setTimeout(()=>$('#globalSearch')?.focus(),80);return}if(!$('#tourModal').hidden){if(e.key==='ArrowRight'){e.preventDefault();if(state.tourStep<TOUR.length-1){state.tourStep++;renderTour()}else endTour(true)}if(e.key==='ArrowLeft'){e.preventDefault();if(state.tourStep>0){state.tourStep--;renderTour()}}return}const k=e.key.toLowerCase();if(k==='n'){e.preventDefault();state.user?openModal('listingModal'):showLogin();return}if(k==='f'){e.preventDefault();navigate('marketplace');setTimeout(()=>$('#filterFocusBtn')?.focus(),80);return}if(k==='h'){navigate('home');return}if(k==='m'){navigate('marketplace');return}if(k==='a'){navigate('about');return}if(k==='t'){startTour(0);return}if(k==='d'){toggleTheme();return}if(k==='?'){e.preventDefault();openShortcuts()}}
 
-  function initLoader(){const loader=$('#loader'),progress=$('#loaderProgress'),msg=$('#loaderMessage');const messages=['Preparing your campus marketplace','Restoring your local account','Loading your saved workspace','Preparing your feature views','Opening UniTrade'];let i=0,done=false;const hide=()=>{if(done)return;done=true;loader.classList.add('is-hidden');try{sessionStorage.setItem('unitrade_loader_seen_v4','1')}catch{}};$('#skipLoaderBtn')?.addEventListener('click',hide);let seen=false;try{seen=sessionStorage.getItem('unitrade_loader_seen_v4')==='1'}catch{}if(seen||matchMedia('(prefers-reduced-motion: reduce)').matches){hide();return}const timer=setInterval(()=>{msg.textContent=messages[i];progress.style.width=`${Math.round((i+1)/messages.length*100)}%`;i++;if(i>=messages.length){clearInterval(timer);setTimeout(hide,180)}},180);setTimeout(hide,3000)}
+  function initLoader(){const loader=$('#loader'),progress=$('#loaderProgress'),msg=$('#loaderMessage');const messages=['Preparing your campus marketplace','Restoring your local account','Loading your saved workspace','Preparing your feature views','Opening UniTrade'];let i=0,done=false,timer=null;const hide=()=>{if(done)return;done=true;if(timer)clearInterval(timer);loader.classList.add('is-hidden');try{sessionStorage.setItem('unitrade_loader_seen_v4','1')}catch{}};$('#skipLoaderBtn').addEventListener('click',hide);let seen=false;try{seen=sessionStorage.getItem('unitrade_loader_seen_v4')==='1'}catch{}if(seen||matchMedia('(prefers-reduced-motion: reduce)').matches){hide();return}timer=setInterval(()=>{msg.textContent=messages[i];progress.style.width=`${Math.round((i+1)/messages.length*100)}%`;i++;if(i>=messages.length){clearInterval(timer);timer=null;setTimeout(hide,120)}},160);setTimeout(hide,2200)}
 
-  function initCanvas(force=false){const canvas=$('#bgCanvas');if(!canvas)return;const ctx=canvas.getContext('2d');let raf=0,w=0,h=0,dpr=1;const chars='01 88 09 SS 50 10';let cols=[];const resize=()=>{dpr=Math.min(2,window.devicePixelRatio||1);w=window.innerWidth;h=window.innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const step=17;cols=Array.from({length:Math.ceil(w/step)},(_,i)=>({x:i*step,y:Math.random()*-h,speed:0.35+Math.random()*0.95,phase:Math.random()*Math.PI*2}))};resize();window.addEventListener('resize',resize);if((matchMedia('(prefers-reduced-motion: reduce)').matches||state.settings.reducedMotion)&&!force)return;const draw=()=>{ctx.clearRect(0,0,w,h);const grad=ctx.createLinearGradient(0,0,w,h);grad.addColorStop(0,'rgba(102,111,160,.10)');grad.addColorStop(.42,'rgba(245,182,226,.13)');grad.addColorStop(1,'rgba(22,17,42,.10)');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);ctx.font='12px monospace';cols.forEach(c=>{c.y+=c.speed;if(c.y>h+120)c.y=-Math.random()*200;ctx.fillStyle='rgba(255,255,255,.20)';ctx.fillText(chars[Math.floor((c.y/17+c.x)%chars.length)],c.x,c.y);if(Math.random()<.15){ctx.fillStyle='rgba(247,196,234,.28)';ctx.fillText(chars[Math.floor(Math.random()*chars.length)],c.x+5,c.y+14)}});const t=performance.now()/2100;for(let layer=0;layer<3;layer++){ctx.beginPath();for(let x=0;x<=w;x+=14){const y=h*.34+layer*72+Math.sin(x/145+t+layer)*32+Math.sin(x/310-t*1.3)*22;if(x===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.strokeStyle=`rgba(${layer===1?'246,176,210':'130,120,210'},${.12-layer*.025})`;ctx.lineWidth=26;ctx.shadowBlur=24;ctx.shadowColor='rgba(242,168,210,.25)';ctx.stroke();ctx.shadowBlur=0}raf=requestAnimationFrame(draw)};cancelAnimationFrame(raf);draw()}
+  function initCanvas(force=false){
+    const canvas=$('#bgCanvas');
+    if(!canvas)return;
+    const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches||state.settings.reducedMotion;
+    const mobile=matchMedia('(max-width: 820px)').matches;
+    const ctx=canvas.getContext('2d',{alpha:true});
+    if(!ctx || mobile || reduced){ canvas.style.display='none'; return; }
+    canvas.style.display='block';
+    let raf=0,w=0,h=0,dpr=1,last=0,visible=true;
+    const chars='01 88 09 SS 50 10';
+    let cols=[];
+    const resize=()=>{
+      dpr=Math.min(1.25,window.devicePixelRatio||1);
+      w=window.innerWidth; h=window.innerHeight;
+      canvas.width=Math.max(1,Math.round(w*dpr)); canvas.height=Math.max(1,Math.round(h*dpr));
+      canvas.style.width=w+'px'; canvas.style.height=h+'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const step=24;
+      const count=Math.min(72,Math.ceil(w/step));
+      cols=Array.from({length:count},(_,i)=>({x:i*step,y:Math.random()*-h,speed:0.22+Math.random()*0.5}));
+    };
+    const stop=()=>{if(raf){cancelAnimationFrame(raf);raf=0;}};
+    const draw=(now)=>{
+      if(!visible)return;
+      if(now-last<33){raf=requestAnimationFrame(draw);return;} // ~30fps
+      last=now;
+      ctx.clearRect(0,0,w,h);
+      const grad=ctx.createLinearGradient(0,0,w,h);
+      grad.addColorStop(0,'rgba(102,111,160,.14)');
+      grad.addColorStop(.42,'rgba(245,182,226,.16)');
+      grad.addColorStop(1,'rgba(22,17,42,.12)');
+      ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+      ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';
+      cols.forEach(c=>{
+        c.y+=c.speed*1.6;
+        if(c.y>h+120)c.y=-Math.random()*220;
+        ctx.fillStyle='rgba(255,255,255,.24)';
+        const ch=chars[Math.floor((c.y/17+c.x)%chars.length)];
+        ctx.fillText(ch,c.x,c.y);
+      });
+      const t=now/2600;
+      for(let layer=0;layer<2;layer++){
+        ctx.beginPath();
+        for(let x=0;x<=w;x+=20){
+          const y=h*.34+layer*78+Math.sin(x/160+t+layer)*28+Math.sin(x/340-t*1.1)*18;
+          if(x===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle=layer===1?'rgba(246,176,210,.11)':'rgba(130,120,210,.10)';
+        ctx.lineWidth=22; ctx.shadowBlur=12; ctx.shadowColor='rgba(242,168,210,.14)'; ctx.stroke(); ctx.shadowBlur=0;
+      }
+      raf=requestAnimationFrame(draw);
+    };
+    resize();
+    window.addEventListener('resize',resize,{passive:true});
+    document.addEventListener('visibilitychange',()=>{
+      visible=!document.hidden;
+      if(visible){last=performance.now();stop();raf=requestAnimationFrame(draw);}else stop();
+    },{passive:true});
+    stop(); raf=requestAnimationFrame(draw);
+  }
   function initCursor(){if(matchMedia('(pointer:fine)').matches){document.body.classList.add('cursor-ready');document.addEventListener('pointermove',e=>{const g=$('#cursorGlow');if(g){g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'}})}}
 
   function init(){hydrate();initNavigation();populateCategories();renderProfile();renderNotifications();renderNotificationCount();renderListings();renderRequests();renderCommunity();renderImpact();renderVault();renderTradeOptions();renderTradeHistory();renderBundleCards();renderFireSale();bindGlobal();bindForms();bindMarketplace();bindServices();bindVault();bindFairPrice();bindLostFound();bindFireSale();bindTour();initLoader();initCanvas();initCursor();renderRoute();window.addEventListener('resize',()=>{if(!$('#tourModal').hidden)spotlight($('#'+TOUR[state.tourStep][1]))});}
-  let booted=false;
-  function boot(){if(booted)return;booted=true;try{init()}catch(err){console.error('UniTrade startup error',err);const loader=$('#loader');loader?.classList.add('is-hidden');toast('UniTrade could not finish startup','The page was recovered from a startup error. Please refresh once and try again.','error')}}
-  boot();
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true}); else init();
 })();
